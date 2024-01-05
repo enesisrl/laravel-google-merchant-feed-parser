@@ -1,0 +1,18 @@
+{
+    "name": "enesisrl/laravel-google-merchant-feed-parser",
+    "description": "Library for parsing Google Merchant XML Feed",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Enesisrl\\LaravelGoogleMerchantFeedParser\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Enesi srl"
+        }
+    ],
+    "require": {
+        "ext-simplexml": "*"
+    }
+}
