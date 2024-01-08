@@ -3,6 +3,7 @@
 namespace Enesisrl\LaravelGoogleMerchantFeedParser;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use JsonException;
 use JsonSerializable;
 use RuntimeException;
@@ -72,17 +73,37 @@ class Parser extends SimpleXMLElement implements JsonSerializable{
         return (array)json_decode(json_encode($this, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
     }
 
+    public function getData(){
+        $data = $this->toArray();
+        return Arr::get($data,'channel');
+    }
+
+    public function getTitle(){
+        $data = $this->getData();
+        return property_exists($data,'title') ? $data->title : null;
+    }
+    public function getDescription(){
+        $data = $this->getData();
+        return property_exists($data,'description') ? $data->description : null;
+    }
+    public function getLink(){
+        $data = $this->getData();
+        return property_exists($data,'link') ? $data->link : null;
+    }
+    public function getPubDate(){
+        $data = $this->getData();
+        return property_exists($data,'pubDate') ? Carbon::parse($data->pubDate) : null;
+    }
     /**
      * @throws JsonException
      */
     public function getItems(): array
     {
         try {
-            $data = $this->toArray();
-            $channel = Arr::get($data,'channel');
-            if (property_exists($channel,'item')){
-                if (is_array($channel->item)){
-                    return $channel->item;
+            $data = $this->getData();
+            if (property_exists($data,'item')){
+                if (is_array($data->item)){
+                    return $data->item;
                 }
 
                 throw new RuntimeException('Items not is array');
