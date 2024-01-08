@@ -2,25 +2,24 @@
 
 namespace Enesisrl\LaravelGoogleMerchantFeedParser;
 
+use Illuminate\Support\Arr;
 use JsonException;
 use JsonSerializable;
+use RuntimeException;
 use SimpleXMLElement;
 use Illuminate\Support\Facades\Http;
 
 class Parser extends SimpleXMLElement implements JsonSerializable{
 
-    protected string $feedUrl;
-    protected string $feedContent;
-
     public function __construct(string $url, int $options = 0, bool $dataIsURL = true, string $namespaceOrPrefix = "", bool $isPrefix = false)
     {
         if ($dataIsURL) {
-            $this->feedUrl = $url;
-            $this->feedContent = Http::get($this->feedUrl);
+            $feedContent = Http::get($url);
         }else{
-            $this->feedContent = $url;
+            $feedContent = $url;
         }
-        parent::__construct($this->feedContent, $options, false, $namespaceOrPrefix, $isPrefix);
+
+        parent::__construct($feedContent, $options, false, $namespaceOrPrefix, $isPrefix);
     }
 
     public function jsonSerialize(): array|string|null
@@ -71,6 +70,45 @@ class Parser extends SimpleXMLElement implements JsonSerializable{
     public function toArray(): array
     {
         return (array)json_decode(json_encode($this, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @throws JsonException
+     */
+    public function getItems(): array
+    {
+        try {
+            $data = $this->toArray();
+            $channel = Arr::get($data,'channel');
+            if (property_exists($channel,'item')){
+                if (is_array($channel->item)){
+                    return $channel->item;
+                }
+
+                throw new RuntimeException('Items not is array');
+            }
+
+            throw new RuntimeException('Property item not exists');
+        } catch (JsonException $e){
+            throw new JsonException($e->getCode(),$e->getMessage());
+        }
+    }
+
+    public function downloadImage($url,$path=null,$filename=null){
+
+        $content = Http::get($url);
+        if ($path || $filename){
+            if (!file_exists($path) && !mkdir($path, 0777, true) && !is_dir($path)) {
+                throw new RuntimeException(sprintf('Directory "%s" was not created', $path));
+            }
+            if (!$filename){
+                $filename = pathinfo($url,PATHINFO_BASENAME);
+            }
+            $file = rtrim($path,"/")."/".ltrim($filename,"/");
+            file_put_contents($file,$content);
+            return $filename;
+        }
+        return $content;
     }
 
 }
