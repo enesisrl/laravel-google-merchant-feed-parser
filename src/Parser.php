@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Http;
 
 class Parser extends SimpleXMLElement implements JsonSerializable{
 
+    protected string $feed_type = '';
+    protected string $feed_data = '';
+
+
     public function __construct(string $url, int $options = 0, bool $dataIsURL = true, string $namespaceOrPrefix = "", bool $isPrefix = false)
     {
         if ($dataIsURL) {
@@ -21,6 +25,20 @@ class Parser extends SimpleXMLElement implements JsonSerializable{
         }
 
         parent::__construct($feedContent, $options, false, $namespaceOrPrefix, $isPrefix);
+
+
+        // Controlla se il feed è di tipo RSS
+        if (isset($this->channel)) {
+            $this->feed_type = "RSS";
+        }
+
+        // Controlla se il feed è di tipo Atom
+        if ($this->getName() === "feed") {
+            $this->feed_type = "Atom";
+        }
+
+        $this->getData();
+
     }
 
     public function jsonSerialize(): array|string|null
@@ -73,46 +91,86 @@ class Parser extends SimpleXMLElement implements JsonSerializable{
         return (array)json_decode(json_encode($this, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * @throws JsonException
+     */
     public function getData(){
-        $data = $this->toArray();
-        return Arr::get($data,'channel');
+
+        $feed_data = [];
+
+
+        switch ($this->feed_type) {
+            case "Atom":
+                $feed_data['title'] = property_exists($this,'title') ?(string)$this->title : null;
+                $feed_data['description'] = property_exists($this,'description') ?(string)$this->description : null;
+                $feed_data['link'] = ($this->link->attributes()->href) ?(string)$this->link->attributes()->href : null;
+                $feed_data['pubDate'] = property_exists($this,'updated') ? (string)$this->updated : null;
+                $feed_data['items'] = [];
+                foreach($this->entry as $entry){
+                    $feed_data['items'][] = (array)json_decode(json_encode($entry, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+                }
+                break;
+            case "RSS":
+                $data = Arr::get($this->toArray(),'channel');
+                $feed_data['title'] = property_exists($data,'title') ? $data->title : null;
+                $feed_data['description'] = property_exists($data,'description') ? $data->description : null;
+                $feed_data['link'] = property_exists($data,'link') ? $data->link : null;
+                $feed_data['pubDate'] = property_exists($this,'pubDate') ? $this->pubDate : null;
+                $feed_data['items'] = [];
+                if (property_exists($data, 'item') && is_array($data->item)) {
+                    $feed_data['items'] = $data->item;
+                }
+                break;
+        }
+        $this->feed_data = json_encode($feed_data, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * @throws JsonException
+     */
+    public function feedData(){
+        return json_decode($this->feed_data, true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @throws JsonException
+     */
     public function getTitle(){
-        $data = $this->getData();
-        return property_exists($data,'title') ? $data->title : null;
+        $data = $this->feedData();
+        return Arr::get($data,'title');
     }
+
+    /**
+     * @throws JsonException
+     */
     public function getDescription(){
-        $data = $this->getData();
-        return property_exists($data,'description') ? $data->description : null;
+        $data = $this->feedData();
+        return Arr::get($data,'description');
     }
+
+    /**
+     * @throws JsonException
+     */
     public function getLink(){
-        $data = $this->getData();
-        return property_exists($data,'link') ? $data->link : null;
+        $data = $this->feedData();
+        return Arr::get($data,'link');
     }
-    public function getPubDate(){
-        $data = $this->getData();
-        return property_exists($data,'pubDate') ? Carbon::parse($data->pubDate) : null;
+
+    /**
+     * @throws JsonException
+     */
+    public function getPubDate(): ?Carbon
+    {
+        $data = $this->feedData();
+        return (Arr::get($data,'pudDate')) ? Carbon::parse(Arr::get($data,'pudDate')) : null;
     }
     /**
      * @throws JsonException
      */
     public function getItems(): array
     {
-        try {
-            $data = $this->getData();
-            if (property_exists($data,'item')){
-                if (is_array($data->item)){
-                    return $data->item;
-                }
-
-                throw new RuntimeException('Items not is array');
-            }
-
-            throw new RuntimeException('Property item not exists');
-        } catch (JsonException $e){
-            throw new JsonException($e->getCode(),$e->getMessage());
-        }
+        $data = $this->feedData();
+        return (Arr::get($data, 'items')) ?: [];
     }
 
     public function downloadImage($url,$path=null,$filename=null){
